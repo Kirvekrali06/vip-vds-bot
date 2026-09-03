@@ -1,8 +1,8 @@
 # Bot by Deniz Aksoy
 
+import os
 import telebot
 import subprocess
-import os
 from telebot import types
 import time
 from datetime import datetime, timedelta
@@ -12,8 +12,29 @@ import threading
 import sys
 import atexit
 import signal
+from flask import Flask
 
-TOKEN = '8036325899:AAGIpZlXvHdO8RHrj77gRQbGg3bR3_ht6Xc'
+# --- KEEP ALIVE WEB SUNUCUSU (Render Port Bağlantısı) ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return 'Bot 7/24 Aktif ve Calisiyor!'
+
+def run_flask():
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = threading.Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+
+# Sunucuyu baslat
+keep_alive()
+# -----------------------------------------------------
+
+TOKEN = '8278258979:AAE60FmsksRkDFEabXVQoYWlge4ac4Owsgw'
 OWNER_ID = 6734911869
 ADMIN_ID = 6734911869
 ADMIN_USERNAME = '@Kirvelerinkrali'
@@ -56,8 +77,6 @@ PREMIUM_PLANS = {
 }
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-# Android/Pydroid bazı klasörlerde SQLite yazmaya izin vermeyebilir.
-# Bu nedenle verileri Pydroid'ın yazılabilir uygulama dizininde tutuyoruz.
 APP_DATA_DIR = os.path.join(os.path.expanduser('~'), 'VipVdsBotData')
 UPLOAD_BOTS_DIR = os.path.join(APP_DATA_DIR, 'upload_bots')
 IROTECH_DIR = os.path.join(APP_DATA_DIR, 'inf')
@@ -231,7 +250,6 @@ def is_bot_running(user_id, file_name):
         except:
             return False
     return False
-
 
 def run_bot_with_log(user_id, file_name, file_path, file_type):
     def target():
@@ -435,8 +453,6 @@ def create_back_keyboard():
 @bot.message_handler(commands=['start', 'help'])
 def command_start(message):
     user_id = message.from_user.id
-    chat_id = message.chat.id
-
 
     if user_id not in active_users:
         active_users.add(user_id)
@@ -567,7 +583,6 @@ def show_premium_menu(message):
 def handle_document(message):
     user_id = message.from_user.id
 
-
     doc = message.document
     file_name = doc.file_name
 
@@ -631,9 +646,6 @@ def handle_document(message):
 
                 admin_msg = f"📤 <b>YENİ DOSYA</b>\n\n👤 {message.from_user.first_name}\n🆔 {user_id}\n📄 {file_name}"
 
-                # Dosya kullanıcıya kaydedildi; admin bildirimi ayrı tutuluyor.
-                # Admin botu daha önce başlatmadıysa Telegram 403 dönebilir,
-                # bu durumda dosya silinmez ve kullanıcıya bilgi verilir.
                 try:
                     with open(file_path, 'rb') as f:
                         bot.send_document(ADMIN_ID, f, caption=admin_msg, reply_markup=create_approval_inline_keyboard(file_id))
@@ -651,11 +663,7 @@ def callback_handler(call):
     user_id = call.from_user.id
     data = call.data
 
-    if data == "back_main":
-        show_main_menu(call.message)
-        return
-
-    elif data == "refresh":
+    if data == "back_main" or data == "refresh":
         show_main_menu(call.message)
         return
 
@@ -716,6 +724,7 @@ def callback_handler(call):
             text="🆘 <b>YARDIM PANELİ</b>\n\nBir sorun veya yardım için aşağıdaki butondan kurucuya ulaşabilirsin.",
             reply_markup=keyboard
         )
+
     elif data == "admin_panel":
         if user_id not in [OWNER_ID, ADMIN_ID]:
             bot.answer_callback_query(call.id, "❌ Yetkiniz yok!", show_alert=True)
@@ -911,7 +920,6 @@ def callback_handler(call):
         if os.path.exists(file_path):
             run_bot_with_log(uid, fname, file_path, 'py')
             bot.answer_callback_query(call.id, f"✅ Başlatıldı: {fname}")
-            is_running = True
             bot.edit_message_reply_markup(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
@@ -1337,5 +1345,3 @@ if __name__ == '__main__':
         except Exception as e:
             logger.error(f"❌ Hata: {e}")
             time.sleep(10)
-
-# Bot by Deniz Aksoy
