@@ -15,6 +15,7 @@ KURUCU_LINK = "https://t.me/kirvelerinkrali"
 bot = telebot.TeleBot(TOKEN)
 
 users = {}
+banned_users = set()  # Banlanan Kullanıcı ID'leri
 admin_states = {}
 
 # ---------------------------------------------------------
@@ -41,6 +42,10 @@ def register_user(user):
         }
     else:
         users[user.id]["username"] = (user.username or "Yok").lower()
+
+def is_banned(user_id):
+    """Kullanıcının banlı olup olmadığını kontrol eder."""
+    return user_id in banned_users
 
 def get_main_inline_keyboard(user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -70,6 +75,10 @@ def get_back_inline_keyboard():
 # ---------------------------------------------------------
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
+    if is_banned(message.from_user.id):
+        bot.send_message(message.chat.id, "🚫 **Sistemden engellendiniz!** Botu kullanamazsınız.", parse_mode="Markdown")
+        return
+
     register_user(message.from_user)
     admin_states.pop(message.from_user.id, None)
     
@@ -88,6 +97,11 @@ def start_cmd(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_listener(call):
     user_id = call.from_user.id
+
+    if is_banned(user_id):
+        bot.answer_callback_query(call.id, "🚫 Engellendiğiniz için bu butonu kullanamazsınız!", show_alert=True)
+        return
+
     register_user(call.from_user)
     
     if call.data == "menu_ana":
@@ -156,12 +170,16 @@ def callback_listener(call):
         bal = users[user_id]["balance"]
         bot.answer_callback_query(call.id, f"💵 Mevcut Bakiyeniz: {bal} Çip", show_alert=True)
 
+    # ADMİN MENÜSÜ
     elif call.data == "menu_admin" and user_id == ADMIN_ID:
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             types.InlineKeyboardButton("📢 Duyuru Gönder", callback_data="admin_duyuru"),
             types.InlineKeyboardButton("👥 Kullanıcılar", callback_data="admin_users"),
-            types.InlineKeyboardButton("➕ Bakiye Ver", callback_data="admin_bakiye"),
+            types.InlineKeyboardButton("➕ Bakiye Ver", callback_data="admin_bakiye_ver"),
+            types.InlineKeyboardButton("➖ Bakiye Al", callback_data="admin_bakiye_al"),
+            types.InlineKeyboardButton("🚫 Kullanıcı Banla", callback_data="admin_ban"),
+            types.InlineKeyboardButton("🟢 Ban Kaldır", callback_data="admin_unban"),
             types.InlineKeyboardButton("🔙 Geri", callback_data="menu_ana")
         )
         bot.edit_message_text(
@@ -174,18 +192,46 @@ def callback_listener(call):
     elif call.data == "admin_users" and user_id == ADMIN_ID:
         text = "👥 **Kayıtlı Kullanıcılar:**\n\n"
         for uid, data in users.items():
-            text += f"👤 **İsim:** {data['first_name']}\n🆔 **ID:** `{uid}`\n🏷 **Kullanıcı Adı:** @{data['username']}\n💵 **Bakiye:** {data['balance']}\n-------------------\n"
+            durum = "🚫 Banlı" if uid in banned_users else "🟢 Aktif"
+            text += f"👤 **İsim:** {data['first_name']}\n🆔 **ID:** `{uid}`\n🏷 **Kullanıcı Adı:** @{data['username']}\n💵 **Bakiye:** {data['balance']}\n📌 **Durum:** {durum}\n-------------------\n"
         bot.send_message(call.message.chat.id, text, parse_mode="Markdown", reply_markup=get_back_inline_keyboard())
 
     elif call.data == "admin_duyuru" and user_id == ADMIN_ID:
         admin_states[user_id] = "WAITING_ANNOUNCEMENT"
         bot.send_message(call.message.chat.id, "📢 Göndermek istediğin duyuru mesajını yaz:", reply_markup=get_back_inline_keyboard())
 
-    elif call.data == "admin_bakiye" and user_id == ADMIN_ID:
-        admin_states[user_id] = "WAITING_BALANCE_INPUT"
+    elif call.data == "admin_bakiye_ver" and user_id == ADMIN_ID:
+        admin_states[user_id] = "WAITING_ADD_BALANCE"
         bot.send_message(
             call.message.chat.id, 
             "➕ Eklemek istediğin miktarı ve Kullanıcı ID veya Kullanıcı Adını yazın:\n\nÖrnek: `5000 123456789` veya `5000 @ahmet`", 
+            parse_mode="Markdown",
+            reply_markup=get_back_inline_keyboard()
+        )
+
+    elif call.data == "admin_bakiye_al" and user_id == ADMIN_ID:
+        admin_states[user_id] = "WAITING_REMOVE_BALANCE"
+        bot.send_message(
+            call.message.chat.id, 
+            "➖ Kesmek istediğin miktarı ve Kullanıcı ID veya Kullanıcı Adını yazın:\n\nÖrnek: `2000 123456789` veya `2000 @ahmet`", 
+            parse_mode="Markdown",
+            reply_markup=get_back_inline_keyboard()
+        )
+
+    elif call.data == "admin_ban" and user_id == ADMIN_ID:
+        admin_states[user_id] = "WAITING_BAN_INPUT"
+        bot.send_message(
+            call.message.chat.id, 
+            "🚫 Banlamak istediğin Kullanıcı ID veya Kullanıcı Adını yazın:\n\nÖrnek: `123456789` veya `@ahmet`", 
+            parse_mode="Markdown",
+            reply_markup=get_back_inline_keyboard()
+        )
+
+    elif call.data == "admin_unban" and user_id == ADMIN_ID:
+        admin_states[user_id] = "WAITING_UNBAN_INPUT"
+        bot.send_message(
+            call.message.chat.id, 
+            "🟢 Banını kaldırmak istediğin Kullanıcı ID veya Kullanıcı Adını yazın:\n\nÖrnek: `123456789` veya `@ahmet`", 
             parse_mode="Markdown",
             reply_markup=get_back_inline_keyboard()
         )
@@ -195,6 +241,10 @@ def callback_listener(call):
 # ---------------------------------------------------------
 @bot.message_handler(commands=['slot'])
 def play_slot(message):
+    if is_banned(message.from_user.id):
+        bot.reply_to(message, "🚫 Banlı olduğunuz için oyun oynayamazsınız.")
+        return
+
     register_user(message.from_user)
     user = users[message.from_user.id]
     args = message.text.split()
@@ -233,6 +283,10 @@ def play_slot(message):
 
 @bot.message_handler(commands=['zar'])
 def play_dice(message):
+    if is_banned(message.from_user.id):
+        bot.reply_to(message, "🚫 Banlı olduğunuz için oyun oynayamazsınız.")
+        return
+
     register_user(message.from_user)
     user = users[message.from_user.id]
     args = message.text.split()
@@ -259,6 +313,10 @@ def play_dice(message):
 
 @bot.message_handler(commands=['yazitura'])
 def play_coin(message):
+    if is_banned(message.from_user.id):
+        bot.reply_to(message, "🚫 Banlı olduğunuz için oyun oynayamazsınız.")
+        return
+
     register_user(message.from_user)
     user = users[message.from_user.id]
     args = message.text.split()
@@ -288,12 +346,13 @@ def play_coin(message):
     bot.edit_message_text(res_text, chat_id=message.chat.id, message_id=wait_msg.message_id, parse_mode="Markdown")
 
 # ---------------------------------------------------------
-# ADMİN GİRDİLERİ
+# ADMİN GİRDİLERİ VE İŞLEMLERİ
 # ---------------------------------------------------------
 @bot.message_handler(func=lambda msg: msg.from_user.id in admin_states)
 def handle_admin_inputs(message):
     state = admin_states.get(message.from_user.id)
     
+    # DUYURU
     if state == "WAITING_ANNOUNCEMENT":
         success, failed = 0, 0
         for uid in users.keys():
@@ -305,7 +364,8 @@ def handle_admin_inputs(message):
         bot.send_message(message.chat.id, f"✅ Duyuru Gönderildi!\n Başarılı: {success}\n❌ Başarısız: {failed}")
         admin_states.pop(message.from_user.id, None)
         
-    elif state == "WAITING_BALANCE_INPUT":
+    # BAKİYE VERME
+    elif state == "WAITING_ADD_BALANCE":
         args = message.text.split()
         if len(args) != 2 or not args[0].isdigit():
             bot.send_message(message.chat.id, "❌ Hatalı format! Örnek: `5000 123456789` veya `5000 @ahmet`", parse_mode="Markdown")
@@ -313,27 +373,83 @@ def handle_admin_inputs(message):
             
         amount = int(args[0])
         target_input = args[1].replace("@", "").lower()
-        target_id = None
-        
-        if target_input.isdigit() and int(target_input) in users:
-            target_id = int(target_input)
-        else:
-            for uid, data in users.items():
-                if data["username"] == target_input:
-                    target_id = uid
-                    break
+        target_id = find_user_id(target_input)
         
         if not target_id:
             bot.send_message(message.chat.id, "❌ **Hata:** Bu kullanıcı botu henüz başlatmamış veya kayıtlı değil!")
         else:
             users[target_id]["balance"] += amount
-            bot.send_message(message.chat.id, f"✅ `{target_id}` ID'li kullanıcıya **{amount} Çip** eklendi!\nYeni Bakiyesi: {users[target_id]['balance']}", parse_mode="Markdown")
+            bot.send_message(message.chat.id, f"✅ `{target_id}` ID'li kullanıcıya **+{amount} Çip** eklendi!\nYeni Bakiyesi: {users[target_id]['balance']}", parse_mode="Markdown")
             try:
-                bot.send_message(target_id, f"🎉 Hesabınıza Admin tarafından **{amount} Çip** eklendi!")
+                bot.send_message(target_id, f"🎉 Hesabınıza Admin tarafından **+{amount} Çip** eklendi!")
             except:
                 pass
-                
         admin_states.pop(message.from_user.id, None)
+
+    # BAKİYE ALMA
+    elif state == "WAITING_REMOVE_BALANCE":
+        args = message.text.split()
+        if len(args) != 2 or not args[0].isdigit():
+            bot.send_message(message.chat.id, "❌ Hatalı format! Örnek: `2000 123456789` veya `2000 @ahmet`", parse_mode="Markdown")
+            return
+            
+        amount = int(args[0])
+        target_input = args[1].replace("@", "").lower()
+        target_id = find_user_id(target_input)
+        
+        if not target_id:
+            bot.send_message(message.chat.id, "❌ **Hata:** Bu kullanıcı kayıtlı değil!")
+        else:
+            users[target_id]["balance"] = max(0, users[target_id]["balance"] - amount)
+            bot.send_message(message.chat.id, f"✅ `{target_id}` ID'li kullanıcıdan **-{amount} Çip** kesildi!\nYeni Bakiyesi: {users[target_id]['balance']}", parse_mode="Markdown")
+            try:
+                bot.send_message(target_id, f"⚠️ Hesabınızdan Admin tarafından **-{amount} Çip** kesildi!")
+            except:
+                pass
+        admin_states.pop(message.from_user.id, None)
+
+    # KULLANICI BANLAMA
+    elif state == "WAITING_BAN_INPUT":
+        target_input = message.text.replace("@", "").lower()
+        target_id = find_user_id(target_input)
+
+        if not target_id:
+            bot.send_message(message.chat.id, "❌ **Hata:** Kullanıcı bulunamadı!")
+        elif target_id == ADMIN_ID:
+            bot.send_message(message.chat.id, "❌ Kendinizi banlayamazsınız!")
+        else:
+            banned_users.add(target_id)
+            bot.send_message(message.chat.id, f"🚫 `{target_id}` ID'li kullanıcı başarıyla **banlandı**!", parse_mode="Markdown")
+            try:
+                bot.send_message(target_id, "🚫 Bot erişiminiz Admin tarafından engellendi.")
+            except:
+                pass
+        admin_states.pop(message.from_user.id, None)
+
+    # BAN KALDIRMA
+    elif state == "WAITING_UNBAN_INPUT":
+        target_input = message.text.replace("@", "").lower()
+        target_id = find_user_id(target_input)
+
+        if not target_id or target_id not in banned_users:
+            bot.send_message(message.chat.id, "❌ **Hata:** Bu kullanıcı banlı değil veya bulunamadı!")
+        else:
+            banned_users.remove(target_id)
+            bot.send_message(message.chat.id, f"🟢 `{target_id}` ID'li kullanıcının banı **kaldırıldı**!", parse_mode="Markdown")
+            try:
+                bot.send_message(target_id, "🟢 Banınız kaldırıldı, botu tekrar kullanabilirsiniz!")
+            except:
+                pass
+        admin_states.pop(message.from_user.id, None)
+
+def find_user_id(target_input):
+    """ID veya Username üzerinden kullanıcı arar."""
+    if target_input.isdigit() and int(target_input) in users:
+        return int(target_input)
+    for uid, data in users.items():
+        if data["username"] == target_input:
+            return uid
+    return None
 
 # ---------------------------------------------------------
 # SUNUCUYU VE BOTU BAŞLATMA
