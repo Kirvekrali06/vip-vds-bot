@@ -30,12 +30,11 @@ keep_alive()
 # ---------------------------------------------------------
 # BOT VE SİSTEM BİLGİLERİ
 # ---------------------------------------------------------
-TOKEN = "8839384581:AAFMEArYZUHFMYjAsprEEwenMwu9Z7_9Hj0
-"
+TOKEN = "8839384581:AAFMEArYZUHFMYjAsprEEwenMwu9Z7_9Hj0"
 ADMIN_ID = 6734911869
 KURUCU_LINK = "https://t.me/kirvelerinkrali"
 
-# Zorunlu Kanallar (Sayısal ID'ler Tanımlandı)
+# Zorunlu Kanallar
 CHANNELS = [
     {"name": "Kanal", "url": "https://t.me/denizdosya", "id": -1003261861393},
     {"name": "Chat", "url": "https://t.me/+D91FStmBTKlhYTJh", "id": -1002659528621},
